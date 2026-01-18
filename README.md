@@ -1,4 +1,4 @@
-<h2>📚 API Reference</h2>
+<h2>Functions</h2>
 
 <h3>Core Functions</h3>
 <table>
