@@ -119,13 +119,13 @@
     <tr>
         <td><code>onDisconnect(callback)</code></td>
         <td><code>void (*)()</code></td>
-        <td><code>wifi.onDisconnect([]() { Serial.println("disconnected"); });</code></td>
+        <td><code>wm.onDisconnect([]() { Serial.println("disconnected"); });</code></td>
         <td>Call function when disconnected</td>
     </tr>
     <tr>
         <td><code>onConfigPortalStart(callback)</code></td>
         <td><code>void (*)()</code></td>
-        <td><code>wifi.onConfigPortalStart([]() { Serial.println("Portal"); });</code></td>
+        <td><code>wm.onConfigPortalStart([]() { Serial.println("Portal"); });</code></td>
         <td>Call function when portal started</td>
     </tr>
 </table>
