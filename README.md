@@ -1,12 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nuba WiFi Manager - API Reference</title>
-</head>
-<body>
-
 <h2>📚 API Reference</h2>
 
 <h3>Core Functions</h3>
@@ -156,5 +147,3 @@ void loop() {
   wifi.run();
 }</code></pre>
 
-</body>
-</html>
