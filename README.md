@@ -4,7 +4,7 @@
 <table>
     <tr>
         <th>Function</th>
-        <th>Data Types</th>
+        <th>Parameter Data Types</th>
         <th>Example</th>
         <th>Description</th>
     </tr>
@@ -38,7 +38,7 @@
 <table>
     <tr>
         <th>Function</th>
-        <th>Data Types</th>
+        <th>Parameter Data Types</th>
         <th>Example</th>
         <th>Description</th>
     </tr>
@@ -112,7 +112,7 @@
 <table>
     <tr>
         <th>Function</th>
-        <th>Data Types</th>
+        <th>Parameter Data Types</th>
         <th>Example</th>
         <th>Description</th>
     </tr>
