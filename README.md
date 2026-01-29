@@ -1,34 +1,34 @@
 <h2>nuba_wm Function Reference</h2>
-<p><em>A secure and simple WiFi manager library for ESP8266/ESP32</em></p>
+<p><em>A more secure and simple WiFi manager library for ESP8266/ESP32</em></p>
 
 <hr>
 
 <h3>Core Functions</h3>
 
 <h4><code>begin()</code></h4>
-<p>Inisialisasi WiFi Manager dengan opsi SSID dan password untuk Access Point. Jika ada WiFi tersimpan, akan otomatis connect. Jika gagal atau belum ada konfigurasi, akan membuka config portal. Kedua parameter bersifat opsional.</p>
+<p>Initialize the WiFi Manager with the SSID and password for the Access Point (softAP). If a Wi-Fi connection is saved, it will automatically connect. If it fails or is not configured, the configuration portal will open.</p>
 <pre>wm.begin();
-wm.begin("MyESP");
-wm.begin("MyESP", "password123");</pre>
+wm.begin("nuba");
+wm.begin("nuba", "ilovecoffee");</pre>
 
 <h4><code>init()</code></h4>
-<p>Alias dari <code>begin()</code>. Fungsi yang sama, bisa gunakan salah satu sesuai preferensi. Menerima parameter SSID dan password untuk Access Point (keduanya opsional).</p>
+<p>Alias ​​of <code>begin()</code>. Same function, you can use either one depending on your preference.</p>
 <pre>wm.init();
-wm.init("MyESP", "password123");</pre>
+wm.init("nuba", "ilovecoffee");</pre>
 
 <h4><code>run()</code></h4>
-<p>Handle web server, DNS server, dan auto-reconnect. <strong>Wajib dipanggil di dalam fungsi loop()</strong> untuk menjaga WiFi Manager tetap berjalan dengan baik.</p>
+<p>Handle the web server, DNS server, and auto-reconnect. <strong>Must be called inside the loop()</strong>function to keep WiFi Manager running properly.</p>
 <pre>void loop() {
   wm.run();
 }</pre>
 
 <h4><code>startConfigPortal()</code></h4>
-<p>Paksa membuka config portal mode AP. Berguna untuk re-konfigurasi WiFi secara manual, misalnya menggunakan tombol fisik. Dapat menerima SSID dan password custom untuk Access Point (opsional).</p>
+<p>Force open the config portal in AP mode. Useful for manually reconfiguring WiFi, for example, using physical buttons.</p>
 <pre>wm.startConfigPortal();
-wm.startConfigPortal("ESP_Config");</pre>
+wm.startConfigPortal("nuba AP");</pre>
 
 <h4><code>reset()</code></h4>
-<p>Menghapus WiFi credentials yang tersimpan dan restart ESP. PIN keamanan tetap tersimpan dan tidak akan terhapus.</p>
+<p>Clear the stored WiFi credentials and restarts the ESP. The security PIN remains stored and will not be erased.</p>
 <pre>wm.reset();</pre>
 
 <hr>
@@ -36,11 +36,11 @@ wm.startConfigPortal("ESP_Config");</pre>
 <h3>Configuration Functions</h3>
 
 <h4><code>setTimeout()</code></h4>
-<p>Mengatur timeout config portal dalam satuan detik. Default 180 detik (3 menit). Timeout hanya berlaku saat WiFi belum pernah dikonfigurasi sama sekali. Menerima nilai dalam tipe <code>uint32_t</code>.</p>
-<pre>wm.setTimeout(300);  // 5 menit timeout</pre>
+<p>Set the portal config timeout in seconds. Default is 180 seconds (3 minutes). The timeout only applies if WiFi has never been configured before. Accepts a value of type <code>uint32_t</code>.</p>
+<pre>wm.setTimeout(300);  // 5 minutes timeout</pre>
 
 <h4><code>setIP()</code></h4>
-<p>Mengatur custom IP address untuk Access Point. Berguna jika ingin menggunakan IP selain default (192.168.4.1). Memerlukan tiga parameter: IP address, gateway, dan subnet mask.</p>
+<p>Set a custom IP address for the Access Point. Useful if you want to use an IP address other than the default (192.168.4.1). Requires three parameters: IP address, gateway, and subnet mask.</p>
 <pre>wm.setIP(
   IPAddress(192, 168, 10, 1),
   IPAddress(192, 168, 10, 1),
@@ -48,11 +48,11 @@ wm.startConfigPortal("ESP_Config");</pre>
 );</pre>
 
 <h4><code>setDebug()</code></h4>
-<p>Mengaktifkan atau menonaktifkan debug log ke Serial Monitor. Sangat berguna untuk troubleshooting masalah koneksi. Menerima nilai boolean <code>true</code> atau <code>false</code>.</p>
+<p>Enable or disable debug logging to Serial Monitor. Very useful for troubleshooting connection problems. Accepts a boolean value of <code>true</code> or <code>false</code>.</p>
 <pre>wm.setDebug(true);</pre>
 
 <h4><code>autoReconnect()</code></h4>
-<p>Mengaktifkan atau menonaktifkan fitur auto reconnect. Jika diaktifkan, ESP akan mencoba reconnect setiap 1 detik saat koneksi WiFi terputus. Default: true. Menerima nilai boolean.</p>
+<p>Enable or disable the auto-reconnect feature. If enabled, the ESP will attempt to reconnect every 1 second when the WiFi connection is lost. Default: true. Accepts a boolean value.</p>
 <pre>wm.autoReconnect(true);</pre>
 
 <hr>
@@ -60,23 +60,23 @@ wm.startConfigPortal("ESP_Config");</pre>
 <h3>Status & Information Functions</h3>
 
 <h4><code>isConnected()</code></h4>
-<p>Mengecek apakah ESP terhubung ke WiFi. Mengembalikan <code>true</code> jika connected, <code>false</code> jika tidak.</p>
+<p>Check if the ESP is connected to WiFi. Returns <code>true</code> if connected, <code>false</code> if not.</p>
 <pre>if (wm.isConnected()) {
   Serial.println("WiFi OK");
 }</pre>
 
 <h4><code>getSSID()</code></h4>
-<p>Mengambil nama SSID WiFi yang sedang terhubung atau tersimpan di memori. Mengembalikan nilai bertipe <code>String</code>.</p>
+<p>Get the name of the currently connected or stored WiFi SSID. Returns a value of type <code>String</code>.</p>
 <pre>String ssid = wm.getSSID();
 Serial.println(ssid);</pre>
 
 <h4><code>getIP()</code></h4>
-<p>Mengambil IP address ESP yang sedang terhubung ke jaringan WiFi. Mengembalikan objek <code>IPAddress</code>.</p>
+<p>Get the IP address of the ESP currently connected to the WiFi network. Returns an <code>IPAddress</code> object.</p>
 <pre>IPAddress ip = wm.getIP();
 Serial.println(ip);</pre>
 
 <h4><code>printDebugInfo()</code></h4>
-<p>Menampilkan informasi lengkap WiFi ke Serial Monitor meliputi: SSID, Channel, RSSI (kekuatan sinyal), MAC Address, IP Address, Gateway, Netmask, DNS, dan Free Heap. Fungsi ini hanya aktif jika debug mode diaktifkan.</p>
+<p>Displays complete WiFi information to Serial Monitor, including: SSID, Channel, RSSI (signal strength), MAC Address, IP Address, Gateway, Netmask, DNS, and Free Heap. This function is only active when debug mode is enabled.</p>
 <pre>wm.printDebugInfo();</pre>
 
 <hr>
@@ -84,7 +84,7 @@ Serial.println(ip);</pre>
 <h3>Callback Functions</h3>
 
 <h4><code>onConnect()</code></h4>
-<p>Mendaftarkan callback function yang akan dipanggil saat WiFi berhasil terhubung. Cocok untuk inisialisasi layanan yang membutuhkan koneksi internet seperti NTP, MQTT, atau web server. Callback function tidak menerima parameter dan tidak mengembalikan nilai.</p>
+<p>Registers a callback function to be called when Wi-Fi is successfully connected. Suitable for initializing services that require an internet connection, such as NTP, MQTT, or a web server. The callback function takes no parameters and returns no value.</p>
 <pre>void onWiFiConnect() {
   Serial.println("Connected!");
 }
@@ -92,7 +92,7 @@ Serial.println(ip);</pre>
 wm.onConnect(onWiFiConnect);</pre>
 
 <h4><code>onConfigPortalStart()</code></h4>
-<p>Mendaftarkan callback function yang akan dipanggil saat config portal dimulai. Berguna untuk memberikan notifikasi visual seperti LED atau buzzer. Callback function tidak menerima parameter dan tidak mengembalikan nilai.</p>
+<p>Registers a callback function that will be called when the portal configuration starts. Useful for providing visual notifications such as LEDs or buzzers. The callback function takes no parameters and returns no value.</p>
 <pre>void onPortalStart() {
   Serial.println("Portal opened");
 }
@@ -100,7 +100,7 @@ wm.onConnect(onWiFiConnect);</pre>
 wm.onConfigPortalStart(onPortalStart);</pre>
 
 <h4><code>onDisconnect()</code></h4>
-<p>Mendaftarkan callback function yang akan dipanggil saat WiFi terputus dari jaringan. Berguna untuk handling error atau cleanup resources. Callback function tidak menerima parameter dan tidak mengembalikan nilai.</p>
+<p>Registers a callback function to be called when Wi-Fi disconnects from the network. Useful for error handling or resource cleanup. The callback function takes no parameters and returns no value.</p>
 <pre>void onWiFiDisconnect() {
   Serial.println("WiFi lost!");
 }
@@ -143,12 +143,3 @@ void loop() {
 </code></pre>
 
 <hr>
-
-<h3>Important Notes</h3>
-<ul>
-  <li>Selalu panggil <code>wm.run()</code> di dalam fungsi <code>loop()</code></li>
-  <li>PIN default adalah <strong>0000</strong>, segera ubah melalui web portal untuk keamanan</li>
-  <li>Auto reconnect akan mencoba koneksi ulang setiap 1 detik saat WiFi terputus</li>
-  <li>Timeout config portal hanya berlaku saat WiFi belum pernah dikonfigurasi</li>
-  <li>Gunakan <code>printDebugInfo()</code> untuk troubleshooting masalah koneksi</li>
-</ul>
