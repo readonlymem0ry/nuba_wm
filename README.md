@@ -62,7 +62,7 @@ wm.startConfigPortal("nuba AP");</pre>
 <h4><code>isConnected()</code></h4>
 <p>Check if the ESP is connected to WiFi. Returns <code>true</code> if connected, <code>false</code> if not.</p>
 <pre>if (wm.isConnected()) {
-  Serial.println("WiFi OK");
+  Serial.println("WiFi Connected");
 }</pre>
 
 <h4><code>getSSID()</code></h4>
@@ -102,7 +102,7 @@ wm.onConfigPortalStart(onPortalStart);</pre>
 <h4><code>onDisconnect()</code></h4>
 <p>Registers a callback function to be called when Wi-Fi disconnects from the network. Useful for error handling or resource cleanup. The callback function takes no parameters and returns no value.</p>
 <pre>void onWiFiDisconnect() {
-  Serial.println("WiFi lost!");
+  Serial.println("WiFi Disconnected!");
 }
 
 wm.onDisconnect(onWiFiDisconnect);</pre>
@@ -133,7 +133,7 @@ void setup() {
   wm.onConnect(onConnect);
   wm.onDisconnect(onDisconnect);
   
-  wm.begin("MyESP_AP", "password123");
+  wm.begin("nuba", "ilovecoffee");
 }
 
 void loop() {
