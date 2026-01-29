@@ -1,0 +1,35 @@
+#######################################
+# Syntax Coloring Map For Sambungin
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+nuba_wm	KEYWORD1
+Manager	KEYWORD1
+Config	KEYWORD1
+Credentials	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+init	KEYWORD2
+startConfigPortal	KEYWORD2
+run	KEYWORD2
+reset	KEYWORD2
+setConfig	KEYWORD2
+setTimeout	KEYWORD2
+setAPStaticIP	KEYWORD2
+setDebug	KEYWORD2
+isConnected	KEYWORD2
+getSSID	KEYWORD2
+getIP	KEYWORD2
+onConnect	KEYWORD2
+onConfigPortalStart	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
