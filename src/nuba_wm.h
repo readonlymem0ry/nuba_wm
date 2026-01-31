@@ -2,7 +2,7 @@
  * nuba_wm - Simple and more secure WiFi Manager for ESP32/ESP8266
  * Read the documentation at https://github.com/readonlymem0ry/nuba_wm
  * 
- * @version 1.2.0
+ * @version 1.0
  * @author readonlymem0ry
  * @license MIT
  */
