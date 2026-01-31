@@ -1,7 +1,11 @@
 #include "nuba_wm.h"
 #include "nuba_HTML.h"
 
-#define PIN_MAGIC 0xABCD1234
+#ifdef ESP8266
+#include <schedule.h>
+#endif
+
+#define PIN_STAMP 0xABCD1234
 #define EEPROM_SIZE 16
 #define EEPROM_PIN_ADDR 0
 
@@ -11,7 +15,11 @@ namespace nuba {
   _connectCallback(nullptr), _portalCallback(nullptr), _disconnectCallback(nullptr),
   _pinAuthenticated(false), _autoReconnect(true), _lastReconnectAttempt(0),
   _reconnectAttempts(0), _reconnectTimeout(60000), _disconnectTime(0),
-  _isConfigPortalRunning(false) {
+  _isConfigPortalRunning(false), _backgroundRunning(false)
+  #ifdef ESP32
+  , _taskHandle(nullptr)
+  #endif
+  {
     _config = Config();
     _pinData.magic = 0;
     _pinData.isDefault = true;
@@ -20,6 +28,7 @@ namespace nuba {
     initPINStorage();
     loadPIN();
   }
+  // END OF Manager() SCOPE
   
   Manager::~Manager() {
     if (_server) delete _server;
@@ -27,6 +36,11 @@ namespace nuba {
     
     #ifdef ESP32
     _preferences.end();
+    if (_taskHandle) vTaskDelete(_taskHandle);
+    #else
+    if (_backgroundRunning) {
+      _ticker.detach();
+    }
     #endif
   }
   
@@ -37,11 +51,12 @@ namespace nuba {
     EEPROM.begin(EEPROM_SIZE);
     #endif
   }
+  // END OF initPINStorage() SCOPE
   
   bool Manager::loadPIN() {
     #ifdef ESP32
     uint32_t magic = _preferences.getUInt("magic", 0);
-    if (magic == PIN_MAGIC) {
+    if (magic == PIN_STAMP) {
       String pin = _preferences.getString("pin", "0000");
       bool isDefault = _preferences.getBool("isDefault", true);
       
@@ -49,61 +64,57 @@ namespace nuba {
       _pinData.pin[4] = '\0';
       _pinData.isDefault = isDefault;
       _pinData.magic = magic;
-      
-      log("PIN loaded from storage");
       return true;
     }
     #else
     uint32_t magic;
     EEPROM.get(EEPROM_PIN_ADDR, magic);
     
-    if (magic == PIN_MAGIC) {
+    if (magic == PIN_STAMP) {
       EEPROM.get(EEPROM_PIN_ADDR + 4, _pinData.pin);
       EEPROM.get(EEPROM_PIN_ADDR + 9, _pinData.isDefault);
       _pinData.magic = magic;
-      
-      log("PIN loaded from EEPROM");
       return true;
     }
     #endif
     
-    log("No PIN found, using default");
     strcpy(_pinData.pin, "0000");
     _pinData.isDefault = true;
-    _pinData.magic = PIN_MAGIC;
+    _pinData.magic = PIN_STAMP;
     return false;
   }
+  // END OF loadPIN() SCOPE
   
   bool Manager::savePIN(const char* pin, bool isDefault) {
     if (strlen(pin) != 4) {
-      log("Invalid PIN length");
+      log("PIN must be 4 digits");
       return false;
     }
     
     strncpy(_pinData.pin, pin, 4);
     _pinData.pin[4] = '\0';
     _pinData.isDefault = isDefault;
-    _pinData.magic = PIN_MAGIC;
+    _pinData.magic = PIN_STAMP;
     
     #ifdef ESP32
-    _preferences.putUInt("magic", PIN_MAGIC);
+    _preferences.putUInt("magic", PIN_STAMP);
     _preferences.putString("pin", String(pin));
     _preferences.putBool("isDefault", isDefault);
-    log("PIN saved to storage");
     #else
-    EEPROM.put(EEPROM_PIN_ADDR, PIN_MAGIC);
+    EEPROM.put(EEPROM_PIN_ADDR, PIN_STAMP);
     EEPROM.put(EEPROM_PIN_ADDR + 4, _pinData.pin);
     EEPROM.put(EEPROM_PIN_ADDR + 9, isDefault);
     EEPROM.commit();
-    log("PIN stored to EEPROM");
     #endif
     
     return true;
   }
+  // END OF savePIN() SCOPE
   
   bool Manager::verifyPIN(const char* pin) {
     return strcmp(_pinData.pin, pin) == 0;
   }
+  // END OF verifyPIN() SCOPE
   
   void Manager::resetPIN() {
     #ifdef ESP32
@@ -121,13 +132,10 @@ namespace nuba {
     
     log("PIN reset to default");
   }
-  
-  bool Manager::begin(const char* apSSID, const char* apPassword) {
-    return init(apSSID, apPassword);
-  }
+  // END OF resetPin() SCOPE
   
   bool Manager::init(const char* apSSID, const char* apPassword) {
-    log("Initializing...");
+    log("Initialize nuba_wm");
     
     if (apSSID) strncpy(_config.ssid, apSSID, 31);
     if (apPassword) strncpy(_config.password, apPassword, 63);
@@ -137,39 +145,42 @@ namespace nuba {
     WiFi.mode(WIFI_STA);
     delay(100);
     
-    String savedSSID = WiFi.SSID();
-    if (savedSSID.length() > 0) {
-      log("Saved SSID found: " + savedSSID);
+    String storedSSID = WiFi.SSID();
+    if (storedSSID.length() > 0) {
+      log("SSID found: " + storedSSID);
       log("Connecting...");
       WiFi.begin();
       
       uint32_t start = millis();
       while (WiFi.status() != WL_CONNECTED) {
         if (millis() - start > _reconnectTimeout) { 
-          log("Connection timeout after " + String(_reconnectTimeout/1000) + " seconds");
-          log("Opening config portal...");
+          log("Connection has timed out after " + String(_reconnectTimeout/1000) + " seconds");
+          log("Running SoftAP. Portal opened and ready to configure.");
           
-          startConfigPortal(apSSID, apPassword);
+          openPortal(apSSID, apPassword);
+          startBackground();
           return false;
         }
         yield();
         delay(100);
       }
       
-      log("Connected with IP: " + WiFi.localIP().toString());
+      log("Connected. IP: " + WiFi.localIP().toString());
       if (_connectCallback) _connectCallback();
+      startBackground();
       return true;
       
     } else {
-      log("No saved credentials found");
-      log("Opening config portal...");
-      startConfigPortal(apSSID, apPassword);
+      log("Stored credentials not found");
+      log("Running SoftAP. Portal opened and ready to configure");
+      openPortal(apSSID, apPassword);
       
       while (true) {
         run();
         if (WiFi.status() == WL_CONNECTED) {
-          log("Connected with IP: " + WiFi.localIP().toString());
+          log("Connected. IP: " + WiFi.localIP().toString());
           if (_connectCallback) _connectCallback();
+          startBackground();
           return true;
         }
         yield();
@@ -177,13 +188,41 @@ namespace nuba {
       }
     }
   }
+
+  void Manager::startBackground() {
+    if (_backgroundRunning) return;
+    
+    #ifdef ESP32
+    xTaskCreatePinnedToCore(_taskWorker, "nuba_wm", 4096, this, 1, &_taskHandle, 1);
+    #else
+    _ticker.attach_ms(50, _tickWorker, this);
+    #endif
+    
+    _backgroundRunning = true;
+    log("Background worker started");
+  }
+
+  #ifdef ESP32
+  void Manager::_taskWorker(void* param) {
+    Manager* manager = (Manager*)param;
+    for (;;) {
+      manager->run();
+      delay(10);
+    }
+  }
+  #else
+  void Manager::_tickWorker(Manager* manager) {
+    schedule_function([manager]() { manager->run(); });
+  }
+  #endif
+  // END OF init() SCOPE
   
-  void Manager::startConfigPortal(const char* apSSID, const char* apPassword) {
+  void Manager::openPortal(const char* apSSID, const char* apPassword) {
     if (apSSID) strncpy(_config.ssid, apSSID, 31);
     if (apPassword) strncpy(_config.password, apPassword, 63);
     
-    log("Starting config portal...");
-    log("Free heap: " + String(ESP.getFreeHeap()));
+    log("Opening portal...");
+    log("Free Heap: " + String(ESP.getFreeHeap()));
     
     WiFi.mode(WIFI_AP_STA);
     delay(200);
@@ -195,7 +234,7 @@ namespace nuba {
     delay(500);
     
     if (!apStarted) {
-      log("AP failed to run. Retrying...");
+      log("SoftAP failed to run. Retrying...");
       delay(1000);
       WiFi.softAP(_config.ssid, _config.password, _config.channel, _config.hidden);
       delay(500);
@@ -209,15 +248,15 @@ namespace nuba {
     _dns->start(53, "*", _config.apIP);
     delay(100);
     
-    log("Running DNS server");
+    log("DNS server started");
     
     if (!_server) _server = new WebServerClass(80);
     setupServer();
     _server->begin();
     delay(100);
     
-    log("Running web server");
-    log("PIN Status: " + String(_pinData.isDefault ? "Default" : "User preferences"));
+    log("Web server started");
+    log("Key: " + String(_pinData.isDefault ? "Default" : "User preferences"));
     
     _startTime = millis();
     _pinAuthenticated = false;
@@ -225,6 +264,7 @@ namespace nuba {
     
     if (_portalCallback) _portalCallback();
   }
+  // END OF openPortal() SCOPE
   
   void Manager::setupServer() {
     _server->on("/", [this]() { handleRoot(); });
@@ -237,11 +277,13 @@ namespace nuba {
     _server->on("/check-pin", [this]() { handleCheckPIN(); });
     _server->onNotFound([this]() { handleRoot(); });
   }
+  // END OF setupServer() SCOPE
   
   void Manager::handleRoot() {
-    log("Serving web page");
+    // log("Serving web page");
     _server->send_P(200, PSTR("text/html"), NUBA_PORTAL_HTML);
   }
+  // END OF handleRoot() SCOPE
   
   void Manager::handleCheckPIN() {
     String json = "{";
@@ -250,6 +292,7 @@ namespace nuba {
     json += "}";
     _server->send(200, "application/json", json);
   }
+  // END OF handleCheckPIN() SCOPE
   
   void Manager::handleVerifyPIN() {
     if (!_server->hasArg("pin")) {
@@ -266,7 +309,7 @@ namespace nuba {
     
     if (verifyPIN(pin.c_str())) {
       _pinAuthenticated = true;
-      log("PIN verified successfully");
+      log("PIN verified");
       
       String json = "{\"success\":true,\"isDefault\":" + String(_pinData.isDefault ? "true" : "false") + "}";
       _server->send(200, "application/json", json);
@@ -275,6 +318,7 @@ namespace nuba {
       _server->send(401, "application/json", "{\"success\":false,\"message\":\"Invalid PIN\"}");
     }
   }
+  // END OF handleVerifyPIN() SCOPE
   
   void Manager::handleUpdatePIN() {
     if (!_pinAuthenticated) {
@@ -307,13 +351,14 @@ namespace nuba {
     }
     
     if (savePIN(newPin.c_str(), false)) {
-      log("PIN updated successfully");
+      log("PIN updated");
       _server->send(200, "application/json", "{\"success\":true,\"message\":\"PIN updated successfully\"}");
     } else {
       log("Failed to save PIN");
       _server->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save PIN\"}");
     }
   }
+  // END OF handleUpdatePIN() SCOPE
   
   void Manager::handleScan() {
     if (!_pinAuthenticated) {
@@ -321,9 +366,9 @@ namespace nuba {
       return;
     }
     
-    log("Scanning for available networks...");
+    log("Scanning for available networks around you...");
     
-    wifi_station_disconnect();
+    WiFi.disconnect();
     int n = WiFi.scanNetworks(false, true);
     
     log("Found " + String(n) + " networks");
@@ -338,7 +383,11 @@ namespace nuba {
       
       json += "{\"ssid\":\"" + ssid + "\",";
       json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
+      #ifdef ESP32
+      json += "\"secure\":" + String(WiFi.encryptionType(i) != WIFI_AUTH_OPEN) + "}";
+      #else
       json += "\"secure\":" + String(WiFi.encryptionType(i) != ENC_TYPE_NONE) + "}";
+      #endif
       
       yield();
     }
@@ -349,6 +398,7 @@ namespace nuba {
     _server->send(200, "application/json", json);
     log("Scan complete");
   }
+  // END OF handleScan() SCOPE
   
   void Manager::handleSave() {
     if (!_pinAuthenticated) {
@@ -364,8 +414,6 @@ namespace nuba {
     String ssid = _server->arg("ssid");
     String pass = _server->arg("pass");
     
-    log("Saving credentials for: " + ssid);
-    
     strncpy(_creds.ssid, ssid.c_str(), 31);
     _creds.ssid[31] = '\0';
     strncpy(_creds.password, pass.c_str(), 63);
@@ -375,14 +423,14 @@ namespace nuba {
     
     delay(100);
     
-    log("Attempting connection to: " + String(_creds.ssid));
+    log("Connecting to: " + String(_creds.ssid));
     if (connectWiFi(_creds.ssid, _creds.password)) {
-      log("Connected successfully");
+      log("Connected!");
       if (_connectCallback) _connectCallback();
       delay(100);
-      stopConfigPortal();
+      closePortal();
     } else {
-      log("Connection failed. Running SoftAP...");
+      log("Connection failed. Running SoftAP and preparing portal...");
       
       WiFi.disconnect(false);
       delay(200);
@@ -395,6 +443,7 @@ namespace nuba {
       delay(500);
     }
   }
+  // END OF handleSave() SCOPE
   
   void Manager::handleInfo() {
     if (!_pinAuthenticated) {
@@ -403,13 +452,18 @@ namespace nuba {
     }
     
     String json = "{";
+    #ifdef ESP32
+    json += "\"chipId\":\"" + String((uint32_t)ESP.getEfuseMac()) + "\",";
+    #else
     json += "\"chipId\":\"" + String(ESP.getChipId()) + "\",";
+    #endif
     json += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
     json += "\"ssid\":\"" + WiFi.SSID() + "\",";
     json += "\"ip\":\"" + WiFi.localIP().toString() + "\"";
     json += "}";
     _server->send(200, "application/json", json);
   }
+  // END OF handleInfo() SCOPE
   
   void Manager::handleReset() {
     if (!_pinAuthenticated) {
@@ -417,12 +471,12 @@ namespace nuba {
       return;
     }
     
-    log("WiFi reset requested");
     _server->send(200, "application/json", "{\"success\":true}");
     delay(500);
     
-    reset();
+    clear();
   }
+  // END OF handleReset() SCOPE
   
   bool Manager::connectWiFi(const char* ssid, const char* password) {
     log("Connecting to WiFi...");
@@ -434,7 +488,9 @@ namespace nuba {
     delay(100);
     
     WiFi.persistent(true);
+    #ifdef ESP8266
     WiFi.setAutoConnect(true);
+    #endif
     WiFi.setAutoReconnect(true);
     
     WiFi.begin(ssid, password);
@@ -442,20 +498,19 @@ namespace nuba {
     uint32_t start = millis();
     while (WiFi.status() != WL_CONNECTED) {
       if (millis() - start > 15000) {
-        log("Connection timeout");
+        log("Connection has timed out");
         return false;
       }
       yield();
       delay(100);
     }
     
-    log("WiFi connected");
+    log("Connected!");
     return true;
   }
+  // END OF connectWiFi() SCOPE
   
-  void Manager::stopConfigPortal() {
-    log("Stopping config portal...");
-    
+  void Manager::closePortal() {
     if (_server) {
       _server->stop();
       delay(100);
@@ -474,8 +529,9 @@ namespace nuba {
     delay(200);
     
     _isConfigPortalRunning = false;
-    log("Config portal stopped");
+    log("Portal closed");
   }
+  // END OF closePortal() SCOPE
   
   void Manager::run() {
     if (_dns) {
@@ -499,25 +555,31 @@ namespace nuba {
       }
     }
   }
+  // END OF run() SCOPE
   
-  void Manager::reset() {
-    log("Resetting WiFi...");
+  void Manager::clear() {
+    log("Clearing WiFi Settings...");
     WiFi.disconnect(true); 
     delay(500);
     ESP.restart();
   }
+  // END OF clear() SCOPE
   
-  void Manager::setTimeout(uint32_t seconds) {
+  void Manager::portalTimeout(uint32_t seconds) {
     _config.timeout = seconds * 1000;
   }
   
-  void Manager::setIP(IPAddress ip, IPAddress gateway, IPAddress subnet) {
+  void Manager::setIP(IPAddress ip) {
     _config.apIP = ip;
-    _config.gateway = gateway;
-    _config.subnet = subnet;
+    _config.gateway = ip;
+    _config.subnet = IPAddress(255, 255, 255, 0);
   }
   
-  void Manager::setDebug(bool enable) {
+  void Manager::setIP(uint8_t o1, uint8_t o2, uint8_t o3, uint8_t o4) {
+    setIP(IPAddress(o1, o2, o3, o4));
+  }
+  
+  void Manager::debug(bool enable) {
     _debug = enable;
   }
   
@@ -531,6 +593,18 @@ namespace nuba {
     log("Reconnect timeout set to " + String(seconds) + " seconds");
   }
   
+  void Manager::onConnect(std::function<void()> cb) {
+    _connectCallback = cb;
+  }
+
+  void Manager::onConfigPortalStart(std::function<void()> cb) {
+    _portalCallback = cb;
+  }
+
+  void Manager::onDisconnect(std::function<void()> cb) {
+    _disconnectCallback = cb;
+  }
+
   void Manager::handleAutoReconnect() {
     if (_isConfigPortalRunning) {
       return;
@@ -556,12 +630,12 @@ namespace nuba {
       uint32_t now = millis();
       
       if (now - _disconnectTime >= _reconnectTimeout) {
-        log("Reconnect timeout reached (" + String(_reconnectTimeout/1000) + "s). Opening config portal...");
+        log("Reconnect timeout reached (" + String(_reconnectTimeout/1000) + "s). Running SoftAP and preparing portal...");
         
         _disconnectTime = now; 
         _reconnectAttempts = 0;
         
-        startConfigPortal(_config.ssid, _config.password);
+        openPortal(_config.ssid, _config.password);
         return;
       }
       
@@ -607,7 +681,7 @@ namespace nuba {
         }
         
         if (WiFi.status() == WL_CONNECTED) {
-          log("Reconnected successfully. IP: " + WiFi.localIP().toString());
+          log("Reconnected. IP: " + WiFi.localIP().toString());
           _reconnectAttempts = 0;
           _disconnectTime = 0;
           
@@ -620,86 +694,59 @@ namespace nuba {
       }
     }
   }
+  // END OF handleAutoReconnect() SCOPE
   
-  void Manager::printDebugInfo() {
+  void Manager::netInfo() {
     if (!_debug) return;
     
-    Serial.println("----------------------------------------");
-    Serial.println("[nuba_wm] Network Information");
-    Serial.println("----------------------------------------");
-    
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("Status      : Connected");
-      Serial.print("SSID        : ");
+      Serial.println("Status    : Connected");
+      Serial.println("Mode      : STA");
+      Serial.print("SSID      : ");
       Serial.println(WiFi.SSID());
-      Serial.print("Channel     : ");
+      Serial.print("Channel   : ");
       Serial.println(WiFi.channel());
-      Serial.print("RSSI        : ");
+      Serial.print("RSSI      : ");
       Serial.print(WiFi.RSSI());
       Serial.println(" dBm");
-      Serial.print("MAC Address : ");
+      Serial.print("MAC Addr. : "); 
       Serial.println(WiFi.macAddress());
-      Serial.print("IP Address  : ");
+      Serial.print("IP Addr.  : ");
       Serial.println(WiFi.localIP());
-      Serial.print("Gateway     : ");
+      Serial.print("Gateway   : ");
       Serial.println(WiFi.gatewayIP());
-      Serial.print("Netmask     : ");
+      Serial.print("Netmask   : ");
       Serial.println(WiFi.subnetMask());
-      Serial.print("DNS         : ");
+      Serial.print("DNS       : ");
       Serial.println(WiFi.dnsIP());
     } else {
-      Serial.println("Status      : Disconnected");
+      Serial.println("Status    : Disconnected");
       if (_isConfigPortalRunning) {
-        Serial.println("Mode        : Access Point");
-        Serial.print("AP SSID     : ");
+        Serial.println("Mode      : AP");
+        Serial.print("SSID      : ");
         Serial.println(_config.ssid);
-        Serial.print("AP IP       : ");
+        Serial.print("IP        : ");
         Serial.println(WiFi.softAPIP());
         
         String savedSSID = WiFi.SSID();
         if (savedSSID.length() > 0) {
-          Serial.print("Saved WiFi  : ");
+          Serial.print("Stored    : ");
           Serial.println(savedSSID);
-          Serial.println("Info        : WiFi credentials preserved. Will auto-reconnect after restart.");
         }
       }
     }
     
-    Serial.print("Auto Reconnect : ");
+    Serial.print("Reconnect : ");
     Serial.println(_autoReconnect ? "true" : "false");
-    Serial.print("Free Heap      : ");
+    Serial.print("Free Heap : ");
     Serial.print(ESP.getFreeHeap());
     Serial.println(" bytes");
-    Serial.println("----------------------------------------");
   }
-  
-  bool Manager::isConnected() {
-    return WiFi.status() == WL_CONNECTED;
-  }
-  
-  String Manager::getSSID() {
-    return WiFi.SSID();
-  }
-  
-  IPAddress Manager::getIP() {
-    return WiFi.localIP();
-  }
-  
-  void Manager::onConnect(void (*func)()) {
-    _connectCallback = func;
-  }
-  
-  void Manager::onConfigPortalStart(void (*func)()) {
-    _portalCallback = func;
-  }
-  
-  void Manager::onDisconnect(void (*func)()) {
-    _disconnectCallback = func;
-  }
+  // END OF printDebugInfo() SCOPE
   
   void Manager::log(const String& msg) {
     if (_debug) {
-      Serial.println("[nuba_wm] " + msg);
+      Serial.println("[nuba] " + msg);
     }
   }
   
